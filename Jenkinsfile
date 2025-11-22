@@ -1,36 +1,37 @@
 pipeline {
     agent any
-
     environment {
-        // Nom de l'image Docker que l'on va construire
-        DOCKER_IMAGE = "ashraff968/web-app-ci-cd:latest"
-        // ID des credentials Docker Hub que tu vas créer dans Jenkins
+        DOCKER_IMAGE = "ashraff968/web-app-ci-cd"
+        DOCKER_TAG = "latest"
         DOCKERHUB_CREDENTIALS = "dockerhub-creds"
+        GITHUB_CREDENTIALS = "github-creds"
+        K8S_DEPLOYMENT = "webapp-deployment"
+        K8S_NAMESPACE = "default"
     }
-
     stages {
+
         stage('Pull Code') {
             steps {
-                echo "Récupération du code depuis GitHub..."
-                git branch: 'main', url: 'https://github.com/Ashreaff/CICDProject'
+                git branch: 'main', 
+                    url: 'https://github.com/Ashreaff/CICDProject',
+                    credentialsId: "${GITHUB_CREDENTIALS}"
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo "Construction de l'image Docker..."
                 script {
-                    docker.build("${DOCKER_IMAGE}")
+                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
                 }
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                echo "Push de l'image Docker sur Docker Hub..."
                 script {
                     docker.withRegistry('https://index.docker.io/v1/', "${DOCKERHUB_CREDENTIALS}") {
-                        docker.image("${DOCKER_IMAGE}").push()
+                        docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").push()
+                        echo "Image pushed to Docker Hub: ${DOCKER_IMAGE}:${DOCKER_TAG}"
                     }
                 }
             }
@@ -38,21 +39,23 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                echo "Déploiement sur Kubernetes..."
-                sh """
-                kubectl apply -f k8s/deployment.yaml
-                kubectl apply -f k8s/service.yaml
-                """
+                script {
+                    // Force Kubernetes to pull the latest image and do a rolling update
+                    sh """
+                    kubectl set image deployment/${K8S_DEPLOYMENT} webapp=${DOCKER_IMAGE}:${DOCKER_TAG} --namespace=${K8S_NAMESPACE}
+                    kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE}
+                    """
+                }
             }
         }
-    }
 
-    post {
-        success {
-            echo 'Pipeline terminé avec succès !'
-        }
-        failure {
-            echo 'Pipeline échoué.'
+        stage('Clean old images (optional)') {
+            steps {
+                script {
+                    // Supprimer les images Docker locales anciennes sur Jenkins
+                    sh "docker images | grep ${DOCKER_IMAGE} | awk '{print \$3}' | xargs docker rmi -f || true"
+                }
+            }
         }
     }
 }

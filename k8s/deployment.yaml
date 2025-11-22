@@ -1,19 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web-app
+  name: webapp-deployment
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: web-app
+      app: webapp
   template:
     metadata:
       labels:
-        app: web-app
+        app: webapp
     spec:
       containers:
-      - name: web-app
-        image: ton_user/web-app-ci-cd:latest
+      - name: webapp
+        image: ashraff968/web-app-ci-cd:latest
         ports:
         - containerPort: 80
+        imagePullPolicy: Always
+      # Si ton image Docker est privée, décommente cette ligne et crée le secret
+      # imagePullSecrets:
+      #   - name: dockerhub-secret
